@@ -170,7 +170,16 @@ async function refreshFactures() {
   const F = S.factures;
   const sum = (arr) => arr.reduce((a, x) => a + Number(x.montant_ttc || 0), 0);
   const achats = F.filter((x) => x.sens === "achat");
-  $("#kpis").innerHTML = [
+  // Chiffre d'affaires : produits du P&L (factures de vente validées + loyers et encaissements sans facture), sur la période filtrée
+  const fl = S.filtres, du = fl.du || `${new Date().getFullYear()}-01-01`, au = fl.au || new Date().toISOString().slice(0, 10);
+  let qca = sb.from("v_pl_lignes").select("source, categorie, montant").gte("date_engagement", du).lte("date_engagement", au).limit(20000);
+  if (fl.societe && fl.societe !== "_aucune") qca = qca.eq("societe_id", fl.societe);
+  const { data: ca } = await qca;
+  const produits = (ca ?? []).filter((l) => (CATS.find((k) => k.code === l.categorie)?.type ?? (l.categorie === "autres_produits" ? "produit" : "")) === "produit");
+  const totCA = produits.reduce((a, l) => a + Number(l.montant), 0);
+  const loyersCA = produits.filter((l) => l.categorie === "loyers").reduce((a, l) => a + Number(l.montant), 0);
+  const periode = fl.du || fl.au ? `${dfr(du)} → ${dfr(au)}` : `depuis le 1er janvier`;
+  $("#kpis").innerHTML = `<div class="kpi" title="Factures de vente validées (HT si assujettie à la TVA) + loyers et autres encaissements sans facture"><span>Chiffre d'affaires</span><b style="color:var(--ok)">${eur(totCA)}</b><span>${periode}${loyersCA ? ` · dont loyers ${eur(loyersCA)}` : ""}</span></div>` + [
     ["À payer (achats)", sum(achats.filter((x) => x.statut === "a_payer")), achats.filter((x) => x.statut === "a_payer").length],
     ["Dont en retard", sum(F.filter((x) => x.en_retard)), F.filter((x) => x.en_retard).length],
     ["À vérifier", sum(F.filter((x) => x.statut === "a_verifier")), F.filter((x) => x.statut === "a_verifier").length],
