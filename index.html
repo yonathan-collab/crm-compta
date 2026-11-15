@@ -30,6 +30,9 @@
   .s-a_verifier{background:#fff3d6;color:#7a5200}.s-a_payer{background:#e3ecf7;color:#1f4e79}
   .s-payee{background:#dff1e6;color:#1e5e39}.s-litige{background:#fbe3e1;color:#8c1d16}.s-annulee{background:#eee;color:#777}
   .late{color:var(--bad);font-weight:600}
+  select.st-sel{appearance:none;-webkit-appearance:none;border:0;cursor:pointer;padding:3px 22px 3px 10px;font:inherit;font-size:12px;font-weight:600;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23666'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center}
+  select.st-sel:hover{filter:brightness(.95)}
   .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}
   .kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
   .kpi b{display:block;font-size:20px;font-variant-numeric:tabular-nums}.kpi span{color:var(--mute);font-size:12px}
@@ -194,10 +197,21 @@ async function refreshFactures() {
       <td class="small">${esc(x.description ?? "")}${x.notes ? `<div class="mute">${esc(x.notes)}</div>` : ""}</td>
       <td class="n">${eur(x.montant_ht, x.devise)}</td><td class="n"><b>${eur(x.montant_ttc, x.devise)}</b></td>
       <td class="${x.en_retard ? "late" : ""}">${dfr(x.date_echeance)}</td>
-      <td>${pill(x.statut)}</td>
+      <td>${isAdmin() ? `<select class="pill s-${x.statut} st-sel" data-st="${x.id}" title="Changer le statut">${Object.entries(STATUTS).map(([k, l]) => `<option value="${k}" ${x.statut === k ? "selected" : ""}>${l}</option>`).join("")}</select>` : pill(x.statut)}</td>
       <td class="small">${x.date_paiement ? dfr(x.date_paiement) : ""}${x.paiement_libelle ? `<div class="mute">${esc(x.paiement_banque ?? "")} · ${esc(x.paiement_libelle)}</div>` : ""}${x.paiement_rapprochement === "auto_montant" ? `<div class="late">montant seul — à confirmer</div>` : ""}</td>
       <td style="white-space:nowrap">${x.fichier_path ? `<button class="b" data-pdf="${x.id}">PDF</button>` : ""} ${isAdmin() ? `<button class="b" data-ed="${x.id}">Modifier</button>` : `<button class="b" data-ed="${x.id}">Détail</button>`}</td>
     </tr>`).join("") : `<tr><td colspan="11" class="mute">Aucune facture.</td></tr>`) + "</tbody>";
+  document.querySelectorAll("[data-st]").forEach((sel) => sel.onchange = async () => {
+    const id = sel.dataset.st, nouveau = sel.value, x = S.factures.find((f) => f.id === id);
+    sel.className = `pill s-${nouveau} st-sel`; sel.disabled = true;
+    const maj = { statut: nouveau };
+    if (nouveau === "payee" && !x?.date_paiement) maj.date_paiement = new Date().toISOString().slice(0, 10);
+    const { error } = await sb.from("factures").update(maj).eq("id", id);
+    if (error) { toast(error.message); sel.value = x.statut; sel.className = `pill s-${x.statut} st-sel`; sel.disabled = false; return; }
+    if (nouveau === "a_payer") await sb.rpc("rapprocher");
+    toast(`Statut : ${STATUTS[nouveau]}`, 2000);
+    refreshFactures();
+  });
   document.querySelectorAll("[data-pdf]").forEach((b) => b.onclick = () => ouvrirPdf(S.factures.find((x) => x.id === b.dataset.pdf)));
   document.querySelectorAll("[data-ed]").forEach((b) => b.onclick = () => editer(S.factures.find((x) => x.id === b.dataset.ed)));
 }
